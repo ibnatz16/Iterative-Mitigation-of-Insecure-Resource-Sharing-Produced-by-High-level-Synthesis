@@ -1,22 +1,26 @@
 from __future__ import print_function
 import argparse
-from ast import arg
+from ast import AsyncFunctionDef, arg
+from pycparser import parse_file, c_generator, c_parser, c_ast
 
-from pycparser import parse_file, c_generator
-
-operations = {"plus": "+", "mult": "*"}
+operations = {"plus": "+", "mult": "*", "rshift": "/"}
 secure_ops = []
 
 def res_share():
     f = open("resource_sharing.txt")
     lines = f.readlines()
+    resource = ""
     for line in lines:
-        if len(lines) == 2:
-            if line.find("Resources") != -1:
-                res = [op for op in operations if op in line]
-                resource = res[0]
-                return resource
-    return 0
+        #if len(lines) == 2:
+        if line.find("Resources") != -1:
+            res = [op for op in operations if op in line]
+            resource = res[0]
+        elif line.find("Secure Asset") !=-1:
+            op_index = line.find("[['")
+            end_index = line.find("']]")
+            substr = line[op_index+3:end_index]
+            ls = substr.split("', '")
+    return resource, ls
 
 def insecure_op(resource):
     operator = ""
@@ -25,30 +29,20 @@ def insecure_op(resource):
             operator = operations[op]
     return operator
 
-def get_secure(ast, asset, assets):
-    
-    assets.append(asset)
-    children = ast.children()
+def binary_op(init, assets, var, unit):
+    if init.left.__class__.__name__ == "ID" or init.right.__class__.__name__ == "ID":
+        if init.left.__class__.__name__ == "ID":
+            if init.left.name == unit:
+                assets.append(var)
+            else:
+                if init.right.__class__.__name__ == "ID":
+                    if init.right.name == unit:
+                        assets.append(var)
+        elif init.left.__class__.__name__ == "BinaryOp":
+            binary_op(init.left, assets, var, unit)
 
-    for child in children:
-        for block in child[1].body.block_items:
-            if block.__class__.__name__ == "Decl":
-                var = block.name
-                init = block.init
-                if init.__class__.__name__ == "BinaryOp":
-                    if init.left.__class__.__name__ == "ID" or init.right.__class__.__name__ == "ID":
-                        if init.left.__class__.__name__ == "ID":
-                            if init.left.name in assets:
-                                assets.append(var)
-                            else:
-                                if init.right.__class__.__name__ == "ID":
-                                    if init.right.name in assets:
-                                        assets.append(var)
-                elif init.__class__.__name__ == "Constant":
-                    pass
+def get_secure(block, assets, check_resource, path):
 
-def ast_traversal(ast, check_resource, assets):
-    children = ast.children()
     for child in children:
         for block in child[1].body.block_items:
             if block.__class__.__name__ == "Decl":
@@ -56,119 +50,236 @@ def ast_traversal(ast, check_resource, assets):
                 init = block.init
                 if init.__class__.__name__ == "BinaryOp":
                     if check_resource == 1:
-                        resource = res_share()
-                        operator = insecure_op(resource)
+                        
                         if init.op == operator:
                             if var in assets:
                                 secure_ops.append(var)
+                    else:
+                        if init.left.__class__.__name__ == "ID" and init.right.__class__.__name__ == "ID":
+                                lname = init.left.name
+                                rname = init.right.name
+                                binaryop = init.op
+                                for p in path:
+                                    if lname in p and rname in p and binaryop in p:
+                                        unit = var
+                        binary_op(init, assets, var, unit)
+                elif init.__class__.__name__ == "Constant":
+                    pass
+            elif block.__class__.__name__ == "If":
+                # Check true and false blocks
+                cond = block.cond
+                true = block.iftrue
+                false = block.iffalse
+                if cond.right.__class__.__name__ == "Constant":
+                    pass
 
-def fix_params(child, old_params):
-    new_params = []
-    decl_vars = []
-    for block in child.body.block_items:
-        if block.__class__.__name__ == "Decl":
-            init = block.init
-            decl_vars.append(block.name)
-            if init.__class__.__name__ == "BinaryOp":
-                if init.left.name not in new_params and init.left.name not in decl_vars:
-                    new_params.append(init.left.name)
-                if init.right.name not in new_params and init.right.name not in decl_vars:
-                    new_params.append(init.right.name)
-    return new_params
+                if true.__class__.__name__ == "Compound":
+                    #Loop through each item
+                    for item in true.block_items:
+                        if item.__class__.__name__ == "Assignment":
+                            # Check the right hand side
+                            if item.rvalue.__class__.__name__ == "BinaryOp":
+                                op = item.rvalue
+                                var = item.lvalue.name
+                                # unit = ""
+                                if check_resource == 1:
+
+                                    if op.op == operator:
+                                        if var in assets:
+                                            secure_ops.append(var)
+                                else:
+                                    if op.left.__class__.__name__ == "ID" and op.right.__class__.__name__ == "ID":
+                                        lname = op.left.name
+                                        rname = op.right.name
+                                        binaryop = op.op
+                                        for p in path:
+                                            if lname in p and rname in p and binaryop in p:
+                                                unit = var
+                                    
+                                    if op.left.__class__.__name__ == "ID":
+                                        if op.left.name == unit:
+                                            assets.append(var)
+                                        else:
+                                            if op.right.__class__.__name__ == "ID":
+                                                if op.right.name == unit:
+                                                    assets.append(var)
+                elif true.__class__.__name__ == "Assignment":
+                    var = true.lvalue.name
+                    if true.rvalue.__class__.__name__ == "BinaryOp":
+                        if check_resource == 1:
+                           
+                            if true.rvalue.op == operator:
+                                if var in assets:
+                                    secure_ops.append(var)
+                        else:
+                            if true.rvalue.left.__class__.__name__ == "ID" and true.rvalue.right.__class__.__name__ == "ID":
+                                lname = true.rvalue.left.name
+                                rname = true.rvalue.right.name
+                                binaryop = true.rvalue.op
+                                for p in path:
+                                    if lname in p and rname in p and binaryop in p:
+                                        unit = var
+                            binary_op(true.rvalue, assets, var, unit)
+
+                if false.__class__.__name__ == "Compound":
+                    for item in false.block_items:
+                        if item.__class__.__name__ == "Assignment":
+                            # Check the right hand side
+                            if item.rvalue.__class__.__name__ == "BinaryOp":
+                                op = item.rvalue
+                                var = item.lvalue.name
+                                if check_resource == 1:
+                                    
+                                    if op.op == operator:
+                                        if var in assets:
+                                            secure_ops.append(var)
+                                else:
+                                    if op.left.__class__.__name__ == "ID" and op.right.__class__.__name__ == "ID":
+                                        lname = op.left.name
+                                        rname = op.right.name
+                                        binaryop = op.op
+                                        for p in path:
+                                            if lname in p and rname in p and binaryop in p:
+                                                unit = var
+                                    
+                                    if op.left.__class__.__name__ == "ID":
+                                        if op.left.name == unit:
+                                            assets.append(var)
+                                        else:
+                                            if op.right.__class__.__name__ == "ID":
+                                                if op.right.name == unit:
+                                                    assets.append(var)
+                elif false.__class__.__name__ == "Assignment":
+                    var = false.lvalue.name
+                    if false.rvalue.__class__.__name__ == "BinaryOp":
+                        if check_resource == 1:
+                            
+                            if false.rvalue.op == operator:
+                                if var in assets:
+                                    secure_ops.append(var)
+                        else:
+                            if false.rvalue.left.__class__.__name__ == "ID" and false.rvalue.right.__class__.__name__ == "ID":
+                                lname = false.rvalue.left.name
+                                rname = false.rvalue.right.name
+                                binaryop = false.rvalue.op
+                                for p in path:
+                                    if lname in p and rname in p and binaryop in p:
+                                        unit = var
+                            binary_op(false.rvalue, assets, var, unit)
 
 def make_ast(ast):
-    children = ast.children()
-    for child in children:
-        c = 0
+    new_children = ast.children()
+    for child in new_children:
+        decl = child[1].decl
+        body = child[1].body
+        c = 0 # count for params
+        new_params = []
+        variables = []
+        first = 0
         block_remove = []
-        index = -1
-        name = ""
-        var_type = ""
-        for block in child[1].body.block_items:
-            index+=1
-            if block.__class__.__name__ == "Decl":
-                if block.name not in secure_ops:
-                    block_remove.append(block)
+        block_name = ""
+        # Check if the return type is int
+        if decl.type.type.type.names[0] == 'int':
+            ft_name = decl.type.type.declname
+            decl.type.type.declname = "%s%s" % (ft_name, '1')
+            filename = "%s.c" % decl.type.type.declname
+            params = decl.type.args.params
+            
+            # We only need two parameters for a binary operation
+            for param in params:
+                if c != 2:
+                    new_params.append(param)
+                    variables.append(param.name)
+                    c+=1
                 else:
-                    name = block.name
-                    var_type = block.type.type
-            elif block.__class__.__name__ == "If":
-                left_var = ""
-                right_var = ""
-                if block.cond.left.__class__.__name__ == "ID":
-                    left_var = block.cond.left.name
-                if block.cond.right.__class__.__name__ == "ID":
-                    right_var = block.cond.right.name
-                if (left_var not in secure_ops) or (right_var not in secure_ops):
-                    if block.iftrue.lvalue.__class__.__name__ == "ID":
-                        if block.iftrue.lvalue.name not in secure_ops:
-                            if block.iffalse.lvalue.__class__.__name__ == "ID":
-                                if block.iftrue.lvalue.name not in secure_ops:
-                                    block_remove.append(block)
-                                else:
-                                    name = block.iftrue.lvalue.name
-                                    var_type = block.type.type
+                    break
+            decl.type.args.params = new_params
+        
+        # Make the body only the binary operation needed and the return
+        for block in body.block_items:
+            if block.__class__.__name__ == "Decl" and first == 0:
+                left_id = c_ast.ID(variables[0])
+                right_id = c_ast.ID(variables[1])
+                new_init = c_ast.BinaryOp(operator,left_id,right_id)
+                block.init = new_init
+                first+=1
+                block_name = block.name
             elif block.__class__.__name__ == "Return":
-                block.expr.name = name
+                block.expr = c_ast.ID(block_name)
+            else:
+                block_remove.append(block)
 
+        # Remove the unneeded blocks
         if block_remove:
             for rm in block_remove:
                 child[1].body.block_items.remove(rm)
 
-        old_params = []
-        for decl in child[1].decl:
-            c += 1
-            decl.type.type = var_type
-            ft_name = decl.type.declname
-            decl.type.declname = "%s%s" % (ft_name, c)
-            filename = "%s.c" % decl.type.declname
-            param_list = decl.args.params
-            for param in param_list:
-                old_params.append(param.name)
-            new_params = fix_params(child[1], old_params)
-            i = 0
-            j = 0
-            while i != len(new_params):
-                if new_params[i] not in old_params:
-                    if param_list[j].name not in new_params:
-                        param_list[j].name = new_params[i]
-                        param_list[j].type.declname = new_params[i]
-                        j+=1
-                        i+=1
-                    else:
-                        j+=1
-                else:
-                    i+=1
-                
-            decl.args.params = param_list
-            param_rm = []
-            if i == len(new_params):
-                for param in param_list:
-                    if param.name not in new_params:
-                        # decl.args.params.remove(param)
-                        param_rm.append(param)
-            
-            for rem in param_rm:
-                decl.args.params.remove(rem)
-                    
     return ast, filename
 
-def change_top (ast, top, new):
+def assignment (a_block, operator, assets, params, var_list):
+    if a_block.__class__.__name__ == "Assignment":
+        if a_block.lvalue.name in assets and a_block.rvalue.__class__.__name__ == "BinaryOp":
+            if a_block.rvalue.op == operator:
+                # var_type = a_block.lvalue.type.type.names[0]
+                # var_name = a_block.lvalue.name
+                # var = "%s %s" % (var_type, var_name)
+                temp_var = [v for v in var_list if a_block.lvalue.name in v]
+                if temp_var[0] != "":
+                    params.append(a_block.rvalue.left.name)
+                    params.append(a_block.rvalue.right.name)
+                    return temp_var[0]
+    return ""
+
+def change_top (ast, assets, operator, top, new):
     var_list = []
     top_module = ""
     params = []
+    var = []
     if new.find("."):
         top_module = new[0:new.find(".")]
     for child in ast.children():
         body = child[1].body
-        decl = child[1].decl
-        for param in decl.type.args.params:
-            params.append(param.name)
+        # decl = child[1].decl
+        var_list = []
+        # for param in decl.type.args.params:
+        #     params.append(param.name)
         for block in body.block_items:
-            if block.__class__.__name__ == "Decl":
-                var_type = block.type.type.names[0]
-                var_name = block.name
-                var = "%s %s" % (var_type, var_name)
+            if block.__class__.__name__ == "Decl": 
+                if block.init.__class__.__name__ == "BinaryOp":
+                    if block.name in assets and block.init.op == operator:
+                        var_type = block.type.type.names[0]
+                        var_name = block.name
+                        var.append("%s %s" % (var_type, var_name))
+                        params.append(block.init.left.name)
+                        params.append(block.init.right.name)
+                        break
+                elif block.init.__class__.__name__ == "Constant" and block.name in assets:
+                    var_list.append(block.name)
+            elif block.__class__.__name__ == "If":
+                false_block = block.iffalse
+                true_block = block.iftrue
+                if true_block.__class__.__name__ == "Compound":
+                    for a_block in true_block.block_items:
+                        if a_block.rvalue.__class__.__name__ == "BinaryOp":
+                            if a_block.rvalue.op == operator:
+                                result = assignment(a_block, operator, assets, params, var_list)
+                                if result != "":
+                                    var.append(result)
+                elif true_block.__class__.__name__ == "Assignment":
+                    result = assignment(true_block, operator, assets, params, var_list)
+                    if result != "":
+                        var.append(result)
+                if false_block.__class__.__name__ == "Compound":
+                    for a_block in false_block.block_items:
+                        if a_block.rvalue.__class__.__name__ == "BinaryOp":
+                            if a_block.rvalue.op == operator:
+                                result = assignment(a_block, operator, assets, params, var_list)
+                                if result != "":
+                                    var.append(result)
+                elif false_block.__class__.__name__ == "Assignment":
+                    result = assignment(false_block, operator, assets, params, var_list, var)
+                    if result != "":
+                        var.append(result)
     param_str = ", ".join(map(str,params))
     file = open(top, "r")
     list_of_lines = file.readlines()
@@ -177,9 +288,9 @@ def change_top (ast, top, new):
     new_line = ""
     for line in list_of_lines:
         # line = line.strip()
-        if line.find(var) != -1:
-            indent = line[0:line.find(var)]
-            new_line = "%s%s = %s(%s);\n" % (indent, var, top_module, param_str)
+        if line.find(var[0]) != -1 and line.find(operator) !=-1:
+            indent = line[0:line.find(var[0])]
+            new_line = "%s%s = %s(%s);\n" % (indent, var[0], top_module, param_str)
             change_index = index
         index += 1
     list_of_lines[change_index] = new_line
@@ -201,17 +312,41 @@ if __name__ == "__main__":
     args = argparser.parse_args()
 
     ast = parse_file(args.filename, use_cpp=False)
-
-    asset = "b"
+    #ast.show()
+    asset = args.secure_asset
     assets = []
+    children = ast.children()
+    check_resource = 0
+
+    assets.append(asset)
+    resource, ls = res_share()
+    count = 0
+    for p in ls:
+        if p.find("int")!=-1:
+            start = p.find("int")
+            p = p[start+5:]
+            end = p.find(")")
+            p = p[0:end]
+            ls[count] = p
+        count +=1
+    operator = insecure_op(resource)
+
+    get_secure(children, assets, check_resource, ls) # works well
+
+    assets = list(set(assets))
+    print(assets)
+
+    #print(operator)
     check_resource = 1
-    get_secure(ast, asset, assets)
-    ast_traversal(ast, check_resource, assets)
+    get_secure(children, assets, check_resource, ls)
+    print(secure_ops)
     new_ast, filename = make_ast(ast)
+    # new_ast.show()
+    ast = parse_file(args.filename, use_cpp=False)
     generator = c_generator.CGenerator()
     #generator.visit(new_ast)
     #filename = "top1.c"
     f = open("../Result/%s" % filename, "w")
     f.write(generator.visit(new_ast))
-    change_top(new_ast, args.filename, filename)
+    change_top(ast, assets, operator, args.filename, filename)
     #file_no+=1

@@ -155,7 +155,7 @@ if __name__ == "__main__":
     if args.auto != "auto":
         # Find the resource sharing problem
         secure_problem = []
-        operations = ["plus", "mult", "rshift"]
+        operations = ["plus", "mult", "divsi"]
         insec_areas = dict()
         prev_sec = []
         count = 0

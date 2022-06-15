@@ -3,7 +3,7 @@ import argparse
 from ast import AsyncFunctionDef, arg
 from pycparser import parse_file, c_generator, c_parser, c_ast
 
-operations = {"plus": "+", "mult": "*", "rshift": "/"}
+operations = {"plus": "+", "mult": "*", "divsi": "/"}
 secure_ops = []
 
 def res_share():
@@ -41,132 +41,146 @@ def binary_op(init, assets, var, unit):
         elif init.left.__class__.__name__ == "BinaryOp":
             binary_op(init.left, assets, var, unit)
 
-def get_secure(block, assets, check_resource, path):
+def get_secure(block, assets, check_resource, path, unit):
+    # unit = ""
+    if block.__class__.__name__ == "Decl":
+        var = block.name
+        if block.init == None:
+            pass
+        else:
+            init = block.init
+            if init.__class__.__name__ == "BinaryOp":
+                if check_resource == 1:
+                    
+                    if init.op == operator:
+                        if var in assets:
+                            secure_ops.append(var)
+                else:
+                    if init.left.__class__.__name__ == "ID" and init.right.__class__.__name__ == "ID":
+                            lname = init.left.name
+                            rname = init.right.name
+                            binaryop = init.op
+                            for p in path:
+                                if lname in p and rname in p and binaryop in p:
+                                    unit = var
+                    binary_op(init, assets, var, unit)
+            elif init.__class__.__name__ == "Constant":
+                pass
+    elif block.__class__.__name__ == "If":
+        # Check true and false blocks
+        # cond = block.cond
+        true = block.iftrue
+        false = block.iffalse
+        
+        # if cond.right.__class__.__name__ == "Constant":
+        #     pass
 
-    for child in children:
-        for block in child[1].body.block_items:
-            if block.__class__.__name__ == "Decl":
-                var = block.name
-                init = block.init
-                if init.__class__.__name__ == "BinaryOp":
-                    if check_resource == 1:
-                        
-                        if init.op == operator:
-                            if var in assets:
-                                secure_ops.append(var)
-                    else:
-                        if init.left.__class__.__name__ == "ID" and init.right.__class__.__name__ == "ID":
-                                lname = init.left.name
-                                rname = init.right.name
-                                binaryop = init.op
-                                for p in path:
-                                    if lname in p and rname in p and binaryop in p:
-                                        unit = var
-                        binary_op(init, assets, var, unit)
-                elif init.__class__.__name__ == "Constant":
-                    pass
-            elif block.__class__.__name__ == "If":
-                # Check true and false blocks
-                cond = block.cond
-                true = block.iftrue
-                false = block.iffalse
-                if cond.right.__class__.__name__ == "Constant":
-                    pass
-
-                if true.__class__.__name__ == "Compound":
-                    #Loop through each item
-                    for item in true.block_items:
-                        if item.__class__.__name__ == "Assignment":
-                            # Check the right hand side
-                            if item.rvalue.__class__.__name__ == "BinaryOp":
-                                op = item.rvalue
-                                var = item.lvalue.name
-                                # unit = ""
-                                if check_resource == 1:
-
-                                    if op.op == operator:
-                                        if var in assets:
-                                            secure_ops.append(var)
-                                else:
-                                    if op.left.__class__.__name__ == "ID" and op.right.__class__.__name__ == "ID":
-                                        lname = op.left.name
-                                        rname = op.right.name
-                                        binaryop = op.op
-                                        for p in path:
-                                            if lname in p and rname in p and binaryop in p:
-                                                unit = var
-                                    
-                                    if op.left.__class__.__name__ == "ID":
-                                        if op.left.name == unit:
-                                            assets.append(var)
-                                        else:
-                                            if op.right.__class__.__name__ == "ID":
-                                                if op.right.name == unit:
-                                                    assets.append(var)
-                elif true.__class__.__name__ == "Assignment":
-                    var = true.lvalue.name
-                    if true.rvalue.__class__.__name__ == "BinaryOp":
+        if true.__class__.__name__ == "Compound":
+            #Loop through each item
+            for item in true.block_items:
+                if item.__class__.__name__ == "Assignment":
+                    # Check the right hand side
+                    if item.rvalue.__class__.__name__ == "BinaryOp":
+                        op = item.rvalue
+                        var = item.lvalue.name
+                        # unit = ""
                         if check_resource == 1:
-                           
-                            if true.rvalue.op == operator:
+
+                            if op.op == operator:
                                 if var in assets:
                                     secure_ops.append(var)
                         else:
-                            if true.rvalue.left.__class__.__name__ == "ID" and true.rvalue.right.__class__.__name__ == "ID":
-                                lname = true.rvalue.left.name
-                                rname = true.rvalue.right.name
-                                binaryop = true.rvalue.op
+                            if op.left.__class__.__name__ == "ID" and op.right.__class__.__name__ == "ID":
+                                lname = op.left.name
+                                rname = op.right.name
+                                binaryop = op.op
                                 for p in path:
                                     if lname in p and rname in p and binaryop in p:
                                         unit = var
-                            binary_op(true.rvalue, assets, var, unit)
-
-                if false.__class__.__name__ == "Compound":
-                    for item in false.block_items:
-                        if item.__class__.__name__ == "Assignment":
-                            # Check the right hand side
-                            if item.rvalue.__class__.__name__ == "BinaryOp":
-                                op = item.rvalue
-                                var = item.lvalue.name
-                                if check_resource == 1:
-                                    
-                                    if op.op == operator:
-                                        if var in assets:
-                                            secure_ops.append(var)
+                            
+                            if op.left.__class__.__name__ == "ID":
+                                if op.left.name == unit:
+                                    assets.append(var)
                                 else:
-                                    if op.left.__class__.__name__ == "ID" and op.right.__class__.__name__ == "ID":
-                                        lname = op.left.name
-                                        rname = op.right.name
-                                        binaryop = op.op
-                                        for p in path:
-                                            if lname in p and rname in p and binaryop in p:
-                                                unit = var
-                                    
-                                    if op.left.__class__.__name__ == "ID":
-                                        if op.left.name == unit:
+                                    if op.right.__class__.__name__ == "ID":
+                                        if op.right.name == unit:
                                             assets.append(var)
-                                        else:
-                                            if op.right.__class__.__name__ == "ID":
-                                                if op.right.name == unit:
-                                                    assets.append(var)
-                elif false.__class__.__name__ == "Assignment":
-                    var = false.lvalue.name
-                    if false.rvalue.__class__.__name__ == "BinaryOp":
+        elif true.__class__.__name__ == "Assignment":
+            var = true.lvalue.name
+            if true.rvalue.__class__.__name__ == "BinaryOp":
+                if check_resource == 1:
+                    
+                    if true.rvalue.op == operator:
+                        if var in assets:
+                            secure_ops.append(var)
+                else:
+                    if true.rvalue.left.__class__.__name__ == "ID" and true.rvalue.right.__class__.__name__ == "ID":
+                        lname = true.rvalue.left.name
+                        rname = true.rvalue.right.name
+                        binaryop = true.rvalue.op
+                        for p in path:
+                            if lname in p and rname in p and binaryop in p:
+                                unit = var
+                    binary_op(true.rvalue, assets, var, unit)
+
+        if false.__class__.__name__ == "Compound":
+            for item in false.block_items:
+                if item.__class__.__name__ == "Assignment":
+                    # Check the right hand side
+                    if item.rvalue.__class__.__name__ == "BinaryOp":
+                        op = item.rvalue
+                        var = item.lvalue.name
                         if check_resource == 1:
                             
-                            if false.rvalue.op == operator:
+                            if op.op == operator:
                                 if var in assets:
                                     secure_ops.append(var)
                         else:
-                            if false.rvalue.left.__class__.__name__ == "ID" and false.rvalue.right.__class__.__name__ == "ID":
-                                lname = false.rvalue.left.name
-                                rname = false.rvalue.right.name
-                                binaryop = false.rvalue.op
+                            if op.left.__class__.__name__ == "ID" and op.right.__class__.__name__ == "ID":
+                                lname = op.left.name
+                                rname = op.right.name
+                                binaryop = op.op
                                 for p in path:
                                     if lname in p and rname in p and binaryop in p:
                                         unit = var
-                            binary_op(false.rvalue, assets, var, unit)
-
+                            elif op.left.__class__.__name__ == "BinaryOp" and op.right.__class__.__name__ == "ID":
+                                lname = op.left.left.name
+                                mname = op.left.right.name
+                                rname = op.right.name
+                                binaryop = op.op
+                                for p in path:
+                                    if lname in p and mname in p and rname in p and binaryop in p:
+                                        unit = var
+                            if op.left.__class__.__name__ == "ID":
+                                if op.left.name == unit:
+                                    assets.append(var)
+                                else:
+                                    if op.right.__class__.__name__ == "ID":
+                                        if op.right.name == unit:
+                                            assets.append(var)
+                elif item.__class__.__name__ == "If":
+                    get_secure(item, assets, check_resource, path, unit)
+        elif false.__class__.__name__ == "Assignment":
+            var = false.lvalue.name
+            if false.rvalue.__class__.__name__ == "BinaryOp":
+                if check_resource == 1:
+                    
+                    if false.rvalue.op == operator:
+                        if var in assets:
+                            secure_ops.append(var)
+                else:
+                    if false.rvalue.left.__class__.__name__ == "ID" and false.rvalue.right.__class__.__name__ == "ID":
+                        lname = false.rvalue.left.name
+                        rname = false.rvalue.right.name
+                        binaryop = false.rvalue.op
+                        for p in path:
+                            if lname in p and rname in p and binaryop in p:
+                                unit = var
+                    binary_op(false.rvalue, assets, var, unit)
+    elif block.__class__.__name__ == "For":
+        for inner in block.stmt.block_items:
+            get_secure(inner,assets,check_resource,path, unit)
+    return unit
 def make_ast(ast):
     new_children = ast.children()
     for child in new_children:
@@ -230,6 +244,47 @@ def assignment (a_block, operator, assets, params, var_list):
                     return temp_var[0]
     return ""
 
+def for_loop(block, ast, assets, operator, top, new, var_list, params, var):
+    if block.__class__.__name__ == "If":
+        false_block = block.iffalse
+        true_block = block.iftrue
+        if true_block.__class__.__name__ == "Compound":
+            for a_block in true_block.block_items:
+                if a_block.__class__.__name__ == "Decl":
+                    if a_block.rvalue.__class__.__name__ == "BinaryOp":
+                        if a_block.rvalue.op == operator:
+                            result = assignment(a_block, operator, assets, params, var_list)
+                            if result != "":
+                                var.append(result)
+                    elif a_block.__class__.__name__ == "If":
+                        for_loop(a_block, ast, assets, operator, top, new, var_list, params, var)
+                    elif a_block.__class__.__name__ == "Assignment":
+                        result = assignment(a_block, operator, assets, params, var_list)
+                        if result != "":
+                            var.append(result)
+        elif true_block.__class__.__name__ == "Assignment":
+            result = assignment(true_block, operator, assets, params, var_list)
+            if result != "":
+                var.append(result)
+        if false_block.__class__.__name__ == "Compound":
+            for a_block in false_block.block_items:
+                if a_block.__class__.__name__ == "Decl":
+                    if a_block.rvalue.__class__.__name__ == "BinaryOp":
+                        if a_block.rvalue.op == operator:
+                            result = assignment(a_block, operator, assets, params, var_list)
+                            if result != "":
+                                var.append(result)
+                elif a_block.__class__.__name__ == "If":
+                    for_loop(a_block, ast, assets, operator, top, new, var_list, params, var)
+                elif a_block.__class__.__name__ == "Assignment":
+                    result = assignment(a_block, operator, assets, params, var_list)
+                    if result != "":
+                        var.append(result)
+        elif false_block.__class__.__name__ == "Assignment":
+            result = assignment(false_block, operator, assets, params, var_list)
+            if result != "":
+                var.append(result)
+
 def change_top (ast, assets, operator, top, new):
     var_list = []
     top_module = ""
@@ -255,31 +310,50 @@ def change_top (ast, assets, operator, top, new):
                         break
                 elif block.init.__class__.__name__ == "Constant" and block.name in assets:
                     var_list.append(block.name)
+                elif block.init == None and block.name in assets:
+                    var_list.append(block.name)
             elif block.__class__.__name__ == "If":
-                false_block = block.iffalse
-                true_block = block.iftrue
-                if true_block.__class__.__name__ == "Compound":
-                    for a_block in true_block.block_items:
-                        if a_block.rvalue.__class__.__name__ == "BinaryOp":
-                            if a_block.rvalue.op == operator:
+                    false_block = block.iffalse
+                    true_block = block.iftrue
+                    if true_block.__class__.__name__ == "Compound":
+                        for a_block in true_block.block_items:
+                            if a_block.__class__.__name__ == "Decl":
+                                if a_block.rvalue.__class__.__name__ == "BinaryOp":
+                                    if a_block.rvalue.op == operator:
+                                        result = assignment(a_block, operator, assets, params, var_list)
+                                        if result != "":
+                                            var.append(result)
+                            elif a_block.__class__.__name__ == "If":
+                                for_loop(a_block, ast, assets, operator, top, new, var_list, params, var)
+                            elif a_block.__class__.__name__ == "Assignment":
                                 result = assignment(a_block, operator, assets, params, var_list)
                                 if result != "":
                                     var.append(result)
-                elif true_block.__class__.__name__ == "Assignment":
-                    result = assignment(true_block, operator, assets, params, var_list)
-                    if result != "":
-                        var.append(result)
-                if false_block.__class__.__name__ == "Compound":
-                    for a_block in false_block.block_items:
-                        if a_block.rvalue.__class__.__name__ == "BinaryOp":
-                            if a_block.rvalue.op == operator:
+                    elif true_block.__class__.__name__ == "Assignment":
+                        result = assignment(true_block, operator, assets, params, var_list)
+                        if result != "":
+                            var.append(result)
+                    if false_block.__class__.__name__ == "Compound":
+                        for a_block in false_block.block_items:
+                            if a_block.__class__.__name__ == "Decl":
+                                if a_block.rvalue.__class__.__name__ == "BinaryOp":
+                                    if a_block.rvalue.op == operator:
+                                        result = assignment(a_block, operator, assets, params, var_list)
+                                        if result != "":
+                                            var.append(result)
+                            elif a_block.__class__.__name__ == "If":
+                                for_loop(a_block, ast, assets, operator, top, new, var_list, params, var)
+                            elif a_block.__class__.__name__ == "Assignment":
                                 result = assignment(a_block, operator, assets, params, var_list)
                                 if result != "":
                                     var.append(result)
-                elif false_block.__class__.__name__ == "Assignment":
-                    result = assignment(false_block, operator, assets, params, var_list, var)
-                    if result != "":
-                        var.append(result)
+                    elif false_block.__class__.__name__ == "Assignment":
+                        result = assignment(false_block, operator, assets, params, var_list)
+                        if result != "":
+                            var.append(result)
+            elif block.__class__.__name__ == "For":
+                for inner in block.stmt.block_items:
+                    for_loop(inner, ast, assets, operator, top, new, var_list, params, var)
     param_str = ", ".join(map(str,params))
     file = open(top, "r")
     list_of_lines = file.readlines()
@@ -321,6 +395,7 @@ if __name__ == "__main__":
     assets.append(asset)
     resource, ls = res_share()
     count = 0
+    binaries = ["+", "*", "/"]
     for p in ls:
         if p.find("int")!=-1:
             start = p.find("int")
@@ -328,17 +403,27 @@ if __name__ == "__main__":
             end = p.find(")")
             p = p[0:end]
             ls[count] = p
+        else:
+            op = [binary for binary in binaries if binary in p]
+            if op:
+                p.strip()
+                print(p)
         count +=1
     operator = insecure_op(resource)
 
-    get_secure(children, assets, check_resource, ls) # works well
+    unit = ""
+    for child in children:
+        for block in child[1].body.block_items:
+            unit = get_secure(block, assets, check_resource, ls, unit) # works well
 
     assets = list(set(assets))
     print(assets)
 
     #print(operator)
     check_resource = 1
-    get_secure(children, assets, check_resource, ls)
+    for child in children:
+        for block in child[1].body.block_items:
+            get_secure(block, assets, check_resource, ls, unit)
     print(secure_ops)
     new_ast, filename = make_ast(ast)
     # new_ast.show()

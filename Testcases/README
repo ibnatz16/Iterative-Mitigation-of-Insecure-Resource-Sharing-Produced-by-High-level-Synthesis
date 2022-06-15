@@ -1,0 +1,34 @@
+Commands for the testcases
+
+Note: When there are brackets [] around a name, that is something you insert accordingly.
+
+Note: I don't think you need to make individual test.xml files, but I included them in case you wanted to test specific numbers
+
+Test 1
+Run bambu with the C code, test file, and constraints. Make sure to enable print-dot.
+python assetflow.py [HLS_datapath.dot] [OP_variables.dot] top b m false
+python parser.py top.c b
+
+Run bambu on top1 with test file and constraints.
+Run bambu with the C code, test file, constraints, and module_lib. Make sure to enable print dot (I have written out this command to you before).
+If you get an error, it doesn't matter as long as you get top.v as a result.
+python assetflow.py [new HLS_datapath.dot] [OP_variables.dot] top b m auto (you may have to switch the "b" out for "a" to see the blue path)
+
+
+Test2
+Run bambu (constraints)
+python assetflow.py [HLS_datapath.dot] [OP_variables.dot] top b m false
+python parser.py top.c b
+
+Run bambu on top1
+Run bambu (constraints and module_lib)
+python assetflow.py [new HLS_datapath.dot] [OP_variables.dot] top b m auto
+
+
+Test3
+Run bambu
+python assetflow.py [HLS_datapath.dot] [OP_variables.dot] top c b false
+python parser.py top.c c
+
+Run bambu (constraints and module_lib)
+python assetflow.py [new HLS_datapath.dot] [OP_variables.dot] top c b auto

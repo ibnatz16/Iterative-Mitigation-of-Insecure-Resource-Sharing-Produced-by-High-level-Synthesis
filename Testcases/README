@@ -16,6 +16,17 @@ python assetflow.py [new HLS_datapath.dot] [OP_variables.dot] top b m auto (you 
 
 
 Test2
+
+Run bambu
+python assetflow.py [HLS_datapath.dot] [OP_variables.dot] top c b false
+python parser.py top.c c
+
+Run bambu (constraints and module_lib)
+python assetflow.py [new HLS_datapath.dot] [OP_variables.dot] top c b auto
+
+
+Test3
+
 Run bambu (constraints)
 python assetflow.py [HLS_datapath.dot] [OP_variables.dot] top b m false
 python parser.py top.c b
@@ -25,10 +36,34 @@ Run bambu (constraints and module_lib)
 python assetflow.py [new HLS_datapath.dot] [OP_variables.dot] top b m auto
 
 
-Test3
-Run bambu
-python assetflow.py [HLS_datapath.dot] [OP_variables.dot] top c b false
-python parser.py top.c c
+Test4
 
+Run bambu (constraints)
+python assetflow.py [HLS_datapath.dot] [OP_variables.dot] top b n false
+python parser.py top.c b
+
+Run bambu on top1
 Run bambu (constraints and module_lib)
-python assetflow.py [new HLS_datapath.dot] [OP_variables.dot] top c b auto
+python assetflow.py [new HLS_datapath.dot] [OP_variables.dot] top b n auto
+
+
+Test 5
+
+Run bambu (constraints)
+python assetflow.py [HLS_datapath.dot] [OP_variables.dot] top b d false
+python parser.py top.c b
+
+Run bambu on top1
+Run bambu (constraints and module_lib)
+python assetflow.py [new HLS_datapath.dot] [OP_variables.dot] top b d auto
+
+
+Test 6
+
+Run bambu (constraints)
+python assetflow.py [HLS_datapath.dot] [OP_variables.dot] top k h false
+python parser.py top.c k
+
+Run bambu on top1
+Run bambu (constraints and module_lib)
+python assetflow.py [new HLS_datapath.dot] [OP_variables.dot] top k h auto
